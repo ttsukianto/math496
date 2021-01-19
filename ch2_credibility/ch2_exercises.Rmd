@@ -3,6 +3,7 @@ title: 'Ch. 2 Exercises: Credibility, Models, and Parameters'
 author: "Thea Sukianto"
 date: "January 19, 2021"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
 ---

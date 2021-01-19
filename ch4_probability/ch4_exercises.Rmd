@@ -2,7 +2,9 @@
 title: 'Ch. 4 Exercises: Probability'
 author: "Thea Sukianto"
 date: "January 18, 2021"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -11,12 +13,12 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Exercise 4.4
 
-Consider a spinner with a $[0,1]$ scale on its circumference. Suppose that the spinner is slanted or magnetized or bent in some way such that it is biased, and its probability density function is $p(x)=6x(1−x)$ over the interval $x\in[0, 1]$.
+Consider a spinner with a $[0,1]$ scale on its circumference. Suppose that the spinner is slanted or magnetized or bent in some way such that it is biased, and its probability density function is $p(x)=6x(1-x)$ over the interval $x\in[0, 1]$.
 
 (A) Adapt the program `IntegralOfDensity.R` to plot this density function and approximate its integral. Comment your code. Be careful to consider values of $x$ only in the interval $[0, 1]$. Hint: You can omit the first couple of lines regarding `meanval` and `sdval`, because those parameter values pertain only to the normal distribution. Then set `xlow = 0` and `xhigh = 1` ,and set `dx` to some small value.
 
 ```{r}
-source("../DBDA2E-utilities.R")
+# source("../DBDA2E-utilities.R")
 # Graph of normal probability density function, with comb of intervals.
 #meanval = 0.0               # Specify mean of distribution.
 #sdval = 0.2                 # Specify standard deviation of distribution.
@@ -28,11 +30,11 @@ x = seq( from = xlow , to = xhigh , by = dx )
 # Compute y values, i.e., probability density at each value of x:
 y = 6*x*(1-x)
 # Plot the function. "plot" draws the intervals. "lines" draws the bell curve.
-openGraph(width=7,height=5)
-plot( x , y , type="h" , lwd=1 , cex.axis=1.5
-	, xlab="x" , ylab="p(x)" , cex.lab=1.5 ,
-	, main="Probability Density of X" , cex.main=1.5 )
-lines( x , y , lwd=3 ,  col="skyblue" )
+#openGraph(width=7,height=5)
+#plot( x , y , type="h" , lwd=1 , cex.axis=1.5
+	#, xlab="x" , ylab="p(x)" , cex.lab=1.5 ,
+	#, main="Probability Density of X" , cex.main=1.5 )
+#lines( x , y , lwd=3 ,  col="skyblue" )
 # Approximate the integral as the sum of width * height for each interval.
 area = sum( dx * y )
 # Display info in the graph.
@@ -40,14 +42,14 @@ area = sum( dx * y )
       #, adj=c(1,.5) , cex=1.5 )
 #text( meanval-sdval , .75*max(y) , bquote( paste(sigma ," = " ,.(sdval)) )
       #, adj=c(1,.5) , cex=1.5 )
-text( .75 , .9*max(y) , bquote( paste(Delta , "x = " ,.(dx)) )
-      , adj=c(0,.5) , cex=1.5 ) 
-text( .75 , .75*max(y) ,
-      bquote(
-        paste( sum(,x,) , " " , Delta , "x p(x) = " , .(signif(area,3)) )
-      ) , adj=c(0,.5) , cex=1.5 )
+#text( .75 , .9*max(y) , bquote( paste(Delta , "x = " ,.(dx)) )
+      #, adj=c(0,.5) , cex=1.5 ) 
+#text( .75 , .75*max(y) ,
+      #bquote(
+        #paste( sum(,x,) , " " , Delta , "x p(x) = " , .(signif(area,3)) )
+      #) , adj=c(0,.5) , cex=1.5 )
 # Save the plot to an PNG  file.
-saveGraph( file = "IntegralOfDensity" , type="png" )
+#saveGraph( file = "IntegralOfDensity" , type="png" )
 ```
 (B) Derive the exact integral using calculus. Hint: See the example, Equation 4.7.
 

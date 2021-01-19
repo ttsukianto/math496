@@ -2,7 +2,9 @@
 title: "SNOTEL Bayesian Regression"
 author: "Thea Sukianto"
 date: "January 18, 2021"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -13,6 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
 library(brms)
 library(ggplot2)
+library(tidybayes)
 ```
 ## Data Preparation
 
@@ -40,7 +43,7 @@ fit_snotel <-
       warmup = 1000, 
       seed = 2)
 ```
-
+### Plot credible regression lines
 ```{r}
 # extract the posterior draws
 post <- posterior_samples(fit_snotel)
@@ -53,13 +56,30 @@ snotel_df %>%
   ggplot(aes(x = precip, y = snow)) +
   geom_abline(intercept = post[1:n_lines, 1], 
               slope     = post[1:n_lines, 2],
-              color = "grey50", size = 1/4, alpha = .3) +
+              color = "blue",
+              size = 1/4, alpha = .3) +
   geom_point(shape = 1) +
   # the `eval(substitute(paste()))` trick came from: https://www.r-bloggers.com/value-of-an-r-object-in-an-expression/
   labs(subtitle = eval(substitute(paste("Data with", n_lines, "credible regression lines"))),
        x = "Max Accumulated Precipitation",
        y = "Max Snow Depth") +
-  coord_cartesian(xlim = c(min(precip), max(snotel_df$precip)),
+  coord_cartesian(xlim = c(min(snotel_df$precip), max(snotel_df$precip)),
                   ylim = c(min(snotel_df$snow), max(snotel_df$snow))) +
+  theme(panel.grid = element_blank())
+```
+
+### Plot posterior distribution
+
+```{r}
+post %>% 
+  ggplot(aes(x = b_precip, y = 0)) +
+  stat_histinterval(point_interval = mode_hdi, .width = .95,
+                    fill = "grey67", slab_color = "grey92",
+                    breaks = 40, slab_size = .2, outline_bars = T) +
+  scale_y_continuous(NULL, breaks = NULL) +
+  coord_cartesian(xlim = c(0.5, 2)) +
+  labs(title = "The posterior distribution",
+       subtitle = "The mode and 95% HPD intervals are\nthe dot and horizontal line at the bottom.",
+       x = expression(paste(beta[1], " (slope)"))) +
   theme(panel.grid = element_blank())
 ```
