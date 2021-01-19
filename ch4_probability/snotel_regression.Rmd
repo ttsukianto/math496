@@ -1,0 +1,65 @@
+---
+title: "SNOTEL Bayesian Regression"
+author: "Thea Sukianto"
+date: "January 18, 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message = FALSE}
+library(dplyr)
+library(brms)
+library(ggplot2)
+```
+## Data Preparation
+
+```{r}
+snotel_df <- read.csv("../data/Idaho_SNOTEL_locations.csv") %>% # read SNOTEL data and abbreviate pertinent column names 
+  dplyr::rename(snow = Max.Snow.Depth,
+                precip = Max.Accumulated.Precipitation) 
+```
+
+## Fit Bayesian Regression Model
+
+(Code adapted from section 2.3 of "Doing Bayesian Data Analysis in brms and the tidyverse" by A. Solomon Kurz)
+
+```{r}
+fit_snotel <- 
+  brm(data = snotel_df, 
+      family = gaussian, # specify Gaussian response variable (do linear regression)
+      snow ~ 1 + precip, # model formula: snow = intercept + precip
+      prior = c(prior(normal(0, 100), class = Intercept), # N(0, 100) prior for intercept
+                prior(normal(0, 100), class = b), # N(0, 100) prior for slope
+                prior(cauchy(0, 10),  class = sigma)), # Cauchy(0, 10) prior for noise standard deviation
+      chains = 4, # Markov chains
+      cores = 4, # Processor cores
+      iter = 2000, 
+      warmup = 1000, 
+      seed = 2)
+```
+
+```{r}
+# extract the posterior draws
+post <- posterior_samples(fit_snotel)
+
+# this will streamline some of the code, below
+n_lines <- 150
+
+# plot!
+snotel_df %>% 
+  ggplot(aes(x = precip, y = snow)) +
+  geom_abline(intercept = post[1:n_lines, 1], 
+              slope     = post[1:n_lines, 2],
+              color = "grey50", size = 1/4, alpha = .3) +
+  geom_point(shape = 1) +
+  # the `eval(substitute(paste()))` trick came from: https://www.r-bloggers.com/value-of-an-r-object-in-an-expression/
+  labs(subtitle = eval(substitute(paste("Data with", n_lines, "credible regression lines"))),
+       x = "Max Accumulated Precipitation",
+       y = "Max Snow Depth") +
+  coord_cartesian(xlim = c(min(precip), max(snotel_df$precip)),
+                  ylim = c(min(snotel_df$snow), max(snotel_df$snow))) +
+  theme(panel.grid = element_blank())
+```
