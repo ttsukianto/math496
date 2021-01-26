@@ -1,0 +1,32 @@
+---
+title: "Ch. 5 Exercises: Bayes' Rule"
+author: "Thea Sukianto"
+date: "1/26/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Exercise 5.1
+
+Let $T_1$ represent the result of the first test and $T_2$ represent the result of the second test.
+
+Then P(Has disease | $T_1 = +, T_2 = -$) = [1-P($T_1 = +$ | Has disease)] x P(Has disease | $T_1 = +$) / [[1-P($T_1 = +$ | Has disease)]] x P(Has disease | $T_1 = +$) + [1-P($T_1 = +$ | Doesn't have disease)] x (1-P(Has disease | $T_1 = +$))] =
+
+```{r}
+true_positive <- 0.99
+false_positive <- 0.05
+posterior <- 0.019
+
+((1-true_positive) * posterior)/(((1-true_positive) * posterior) + ((1-false_positive) * (1-posterior)))
+
+```
+
+Ran out of time, saving for next week :(
+
+## Exercise 5.2
+
+## Exercise 5.4
+
