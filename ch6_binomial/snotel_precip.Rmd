@@ -1,0 +1,60 @@
+---
+title: "Atlanta Precipitation Prediction"
+author: "Thea Sukianto"
+date: "2/9/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo = FALSE, message = FALSE}
+library(googlesheets4)
+library(tidyverse)
+library(zoo)
+library(HDInterval)
+```
+
+```{r, message = FALSE}
+gid <- "1QNcXSf5Ng1jy75rIr_N1_SwhHOsxB5q35zGYy_wri44"
+data_raw <- read_sheet(gid) 
+atlanta <- data_raw %>% 
+  dplyr::rename(precip = Accumulated.Precipitation) 
+```
+
+```{r}
+
+
+atlanta <- atlanta %>% 
+  dplyr::mutate(if_precip = ifelse((precip - lag(precip)) != 0, 1, 0),
+                window_sum = zoo::rollapply(if_precip, 10, sum, fill = NA))
+
+
+
+atlanta$post_a <- NA # posterior alpha
+atlanta$post_b <- NA # posterior beta
+atlanta$post_avg <- NA # posterior mean
+  
+atlanta$post_a[5] <- 1 # set first prior alpha to 1
+atlanta$post_b[5] <- 1 # set first prior beta to 1
+  
+#x <- seq(0, 1, by = 0.01)
+  
+i <- 6
+while(!is.na(atlanta$window_sum[i])) {
+  atlanta$post_a[i] <- atlanta$window_sum[i] + atlanta$post_a[i-1]
+  atlanta$post_b[i] <- 10 - atlanta$window_sum[i] + atlanta$post_b[i-1]
+  atlanta$post_avg[i] <- (atlanta$window_sum[i] + atlanta$post_a[i-1])/(10 + atlanta$post_a[i-1] + atlanta$post_b[i-1])
+    
+  #atlanta$hdi_low <- hdi(dbeta(x, atlanta$post_a[i], atlanta$post_b[i]))[1]
+  #atlanta$hdi_high <- hdi(dbeta(x, atlanta$post_a[i], atlanta$post_b[i]))[2]
+    
+  i <- i + 1
+  
+}
+
+
+
+```
+
