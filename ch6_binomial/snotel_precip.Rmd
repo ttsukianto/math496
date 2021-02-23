@@ -20,26 +20,30 @@ library(HDInterval)
 gid <- "1QNcXSf5Ng1jy75rIr_N1_SwhHOsxB5q35zGYy_wri44"
 data_raw <- read_sheet(gid) 
 atlanta <- data_raw %>% 
-  dplyr::rename(precip = Accumulated.Precipitation) 
+  dplyr::mutate(precip_daily = precip - lag(precip),
+                precip_daily = ifelse(precip_daily < 0, NA, precip_daily))
 ```
 
 ```{r}
 
-
 atlanta <- atlanta %>% 
-  dplyr::mutate(if_precip = ifelse((precip - lag(precip)) != 0, 1, 0),
+  dplyr::mutate(if_precip = ifelse(precip_daily > 0 & !is.na(precip_daily), 1, 0),
                 window_sum = zoo::rollapply(if_precip, 10, sum, fill = NA))
-
 
 
 atlanta$post_a <- NA # posterior alpha
 atlanta$post_b <- NA # posterior beta
+atlanta$post_a_star <- NA 
+atlanta$post_b_star <- NA 
 atlanta$post_avg <- NA # posterior mean
-  
+atlanta$hdi_low <- NA
+atlanta$hdi_high <- NA
+
+
 atlanta$post_a[5] <- 1 # set first prior alpha to 1
 atlanta$post_b[5] <- 1 # set first prior beta to 1
   
-#x <- seq(0, 1, by = 0.01)
+x <- seq(0, 1, by = 0.01)
   
 i <- 6
 while(!is.na(atlanta$window_sum[i])) {
@@ -53,8 +57,63 @@ while(!is.na(atlanta$window_sum[i])) {
   i <- i + 1
   
 }
+```
 
+```{r}
+hdi_of_icdf <- function(name, width = .95, tol = 1e-8, ... ) {
+  
+  # Arguments:
+  #   `name` is R's name for the inverse cumulative density function
+  #   of the distribution.
+  #   `width` is the desired mass of the HDI region.
+  #   `tol` is passed to R's optimize function.
+  # Return value:
+  #   Highest density iterval (HDI) limits in a vector.
+  # Example of use: For determining HDI of a beta(30, 12) distribution, type
+  #   `hdi_of_icdf(qbeta, shape1 = 30, shape2 = 12)`
+  #   Notice that the parameters of the `name` must be explicitly stated;
+  #   e.g., `hdi_of_icdf(qbeta, 30, 12)` does not work.
+  # Adapted and corrected from Greg Snow's TeachingDemos package.
+  
+  incredible_mass <- 1.0 - width
+  interval_width <- function(low_tail_prob, name, width, ...) {
+    name(width + low_tail_prob, ...) - name(low_tail_prob, ...)
+  }
+  
+  opt_info <- optimize(interval_width, c(0, incredible_mass), 
+                       name = name, width = width, 
+                       tol = tol, ...)
+  
+  hdi_lower_tail_prob <- opt_info$minimum
+  
+  return(c(name(hdi_lower_tail_prob, ...),
+           name(width + hdi_lower_tail_prob, ...)))
+  
+}
+```
 
+```{r, message = FALSE}
+atlanta <- atlanta %>% 
+  mutate(post_a_star = post_a - lag(post_a, 10),
+         post_b_star = post_b - lag(post_b, 10))
+
+atlanta$hdi_low <- sapply(1:nrow(atlanta), function(i){hdi_of_icdf(name = qbeta,
+                                                                   shape1 = atlanta$post_a[i], 
+                                                                   shape2 = atlanta$post_b[i])[1]})
+
+atlanta$hdi_high <- sapply(1:nrow(atlanta), function(i){hdi_of_icdf(name = qbeta, 
+                                                                    shape1 = atlanta$post_a[i],
+                                                                    shape2 = atlanta$post_b[i])[2]})
 
 ```
 
+```{r}
+ggplot(atlanta, aes(x = Date)) +
+  #geom_point(aes(y = precip_daily)) 
+  geom_line(aes(y = post_avg)) +
+  #geom_path(aes(y = hdi_high), alpha = 0.5, color = "red") +
+  #geom_path(aes(y = hdi_low), alpha = 0.5, color = "blue") +
+  geom_ribbon(aes(ymin = hdi_low, ymax = hdi_high), color = "blue", fill = "blue", alpha = 0.5, size = 0.3) +
+  ylab("Precipitation Probability") + 
+  theme_minimal()
+```
