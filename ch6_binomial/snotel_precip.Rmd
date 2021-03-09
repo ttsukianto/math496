@@ -1,5 +1,5 @@
 ---
-title: "Atlanta Precipitation Prediction"
+title: "Bayesian Estimation of Daily Precipitation Probabilities in Idaho"
 author: "Thea Sukianto"
 date: "2/9/2021"
 output: pdf_document
@@ -11,57 +11,55 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r echo = FALSE, message = FALSE}
 library(googlesheets4)
+library(googledrive)
 library(tidyverse)
 library(zoo)
 library(HDInterval)
+library(rgdal)
+library(maps)
+library(tmap)
+library(gstat)
+library(sp)
+library(raster)
 ```
 
-```{r, message = FALSE}
-gid <- "1QNcXSf5Ng1jy75rIr_N1_SwhHOsxB5q35zGYy_wri44"
-data_raw <- read_sheet(gid) 
-atlanta <- data_raw %>% 
-  dplyr::mutate(precip_daily = precip - lag(precip),
-                precip_daily = ifelse(precip_daily < 0, NA, precip_daily))
-```
 
 ```{r}
+generate_posterior <- function(loc, window_size) {
 
-atlanta <- atlanta %>% 
-  dplyr::mutate(if_precip = ifelse(precip_daily > 0 & !is.na(precip_daily), 1, 0),
-                window_sum = zoo::rollapply(if_precip, 10, sum, fill = NA))
-
-
-atlanta$post_a <- NA # posterior alpha
-atlanta$post_b <- NA # posterior beta
-atlanta$post_a_star <- NA 
-atlanta$post_b_star <- NA 
-atlanta$post_avg <- NA # posterior mean
-atlanta$hdi_low <- NA
-atlanta$hdi_high <- NA
-
-
-atlanta$post_a[5] <- 1 # set first prior alpha to 1
-atlanta$post_b[5] <- 1 # set first prior beta to 1
+  loc <- loc %>% 
+    dplyr::mutate(if_precip = ifelse(precip_daily > 0 & !is.na(precip_daily), 1, 0),
+                  window_sum = zoo::rollapply(if_precip, window_size, sum, fill = NA))
   
-x <- seq(0, 1, by = 0.01)
+  loc$post_a <- NA # posterior alpha
+  loc$post_b <- NA # posterior beta
+  loc$post_avg <- NA # posterior mean
+  loc$hdi_low <- NA
+  loc$hdi_high <- NA
   
-i <- 6
-while(!is.na(atlanta$window_sum[i])) {
-  atlanta$post_a[i] <- atlanta$window_sum[i] + atlanta$post_a[i-1]
-  atlanta$post_b[i] <- 10 - atlanta$window_sum[i] + atlanta$post_b[i-1]
-  atlanta$post_avg[i] <- (atlanta$window_sum[i] + atlanta$post_a[i-1])/(10 + atlanta$post_a[i-1] + atlanta$post_b[i-1])
+  
+  loc$post_a[window_size/2] <- 1 # set first prior alpha to 1
+  loc$post_b[window_size/2] <- 1 # set first prior beta to 1
     
-  #atlanta$hdi_low <- hdi(dbeta(x, atlanta$post_a[i], atlanta$post_b[i]))[1]
-  #atlanta$hdi_high <- hdi(dbeta(x, atlanta$post_a[i], atlanta$post_b[i]))[2]
+  i <- (window_size/2)+1
+  while(!is.na(loc$window_sum[i])) {
+    loc$post_a[i] <- loc$window_sum[i] + loc$post_a[i-1]
+    loc$post_b[i] <- window_size - loc$window_sum[i] + loc$post_b[i-1]
+    loc$post_avg[i] <- (loc$window_sum[i] + loc$post_a[i-1])/(window_size + loc$post_a[i-1] + loc$post_b[i-1])
     
-  i <- i + 1
-  
+    loc$hdi_low <- hdi(qbeta(0.95, loc$post_a[i], loc$post_b[i]))[1]
+    loc$hdi_high <- hdi(qbeta(0.95, loc$post_a[i], loc$post_b[i]))[2]
+      
+    i <- i + 1
+  }
+  return(loc)
 }
 ```
 
 ```{r}
 hdi_of_icdf <- function(name, width = .95, tol = 1e-8, ... ) {
   
+  # (Function by Solomon Kurz)
   # Arguments:
   #   `name` is R's name for the inverse cumulative density function
   #   of the distribution.
@@ -92,28 +90,65 @@ hdi_of_icdf <- function(name, width = .95, tol = 1e-8, ... ) {
 }
 ```
 
+
+
+```{r}
+gid_locations <- "1KCS7Xx2gt8sZDnWY2XSG6NKsZ_3H1QgC"
+gid_parent <- "15H_C_7PPtwULzhJ45LPdIz7d2dcXARPu"
+data_files <- drive_ls(as_id(gid_parent), pattern = "csv")
+```
+
+
 ```{r, message = FALSE}
-atlanta <- atlanta %>% 
-  mutate(post_a_star = post_a - lag(post_a, 10),
-         post_b_star = post_b - lag(post_b, 10))
+posterior_probs <- data.frame()
 
-atlanta$hdi_low <- sapply(1:nrow(atlanta), function(i){hdi_of_icdf(name = qbeta,
-                                                                   shape1 = atlanta$post_a[i], 
-                                                                   shape2 = atlanta$post_b[i])[1]})
+for(i in 1:nrow(data_files)) {
+  
+  data_raw <- read.csv(drive_download(as_id(data_files$id[1]))$local_path)
 
-atlanta$hdi_high <- sapply(1:nrow(atlanta), function(i){hdi_of_icdf(name = qbeta, 
-                                                                    shape1 = atlanta$post_a[i],
-                                                                    shape2 = atlanta$post_b[i])[2]})
-
+  loc <- data_raw %>% 
+    dplyr::rename(precip = Accumulated.Precipitation) %>% 
+    dplyr::mutate(precip_daily = precip - lag(precip),
+                  precip_daily = ifelse(precip_daily < 0, NA, precip_daily))
+  
+  print(paste("Processing", i, "out of", nrow(data_files), loc$Station.Name[1]))
+  
+  print("Generating posterior probabilities")
+  loc <- generate_posterior(loc, 10)
+  
+  posterior_probs <- posterior_probs %>% rbind(loc[nrow(loc)-5,])
+}
 ```
 
 ```{r}
-ggplot(atlanta, aes(x = Date)) +
-  #geom_point(aes(y = precip_daily)) 
-  geom_line(aes(y = post_avg)) +
-  #geom_path(aes(y = hdi_high), alpha = 0.5, color = "red") +
-  #geom_path(aes(y = hdi_low), alpha = 0.5, color = "blue") +
-  geom_ribbon(aes(ymin = hdi_low, ymax = hdi_high), color = "blue", fill = "blue", alpha = 0.5, size = 0.3) +
-  ylab("Precipitation Probability") + 
-  theme_minimal()
+coords <- posterior_probs %>% select(Longitude, Latitude)
+post_precip <- posterior_probs %>% select(post_avg)
+pts <- SpatialPointsDataFrame(coords, post_precip)
+idaho <- SpatialPolygons(list(Polygons(list(map_data("state") %>% filter(region == "idaho") %>% select(long, lat) %>% Polygon()), "Idaho")), proj4string = CRS("+proj=longlat +datum=WGS84"))
+
+pts@bbox <- idaho@bbox
+
+# From "Intro to GIS and Spatial Analysis" by Manuel Gimond: https://mgimond.github.io/Spatial/interpolation-in-r.html
+
+# Create an empty grid where n is the total number of cells
+grd              <- as.data.frame(spsample(pts, "regular", n=50000))
+names(grd)       <- c("X", "Y")
+coordinates(grd) <- c("X", "Y")
+gridded(grd)     <- TRUE  # Create SpatialPixel object
+fullgrid(grd)    <- TRUE  # Create SpatialGrid object
+
+proj4string(pts) <- proj4string(pts) 
+proj4string(grd) <- proj4string(pts)
+
+# Interpolate the grid cells using a power value of 2 (idp=2.0)
+pts.idw <- gstat::idw(post_avg ~ 1, pts, newdata=grd, idp=2.0)
+
+r       <- raster(pts.idw)
+r.m     <- mask(r, idaho)
+
+tm_shape(r.m) + 
+  tm_raster(n=10,palette = "RdBu",
+            title="Precipitation Probability") + 
+  tm_shape(pts) + tm_dots(size=0.2) +
+  tm_legend(legend.outside=TRUE)
 ```
